@@ -1,0 +1,74 @@
+---
+- name: Add k8s repository
+  yum_repository:
+    name: kubernetes
+    description: Kubernetes Repo
+    baseurl: https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+    gpgcheck: yes
+    enabled: yes
+    gpgkey: https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+
+- name: Add docker repository
+  yum_repository:
+    name: docker-ce
+    description: docker-ce Repo
+    baseurl: https://download.docker.com/linux/centos/7/$basearch/stable
+    gpgcheck: yes
+    enabled: yes
+    gpgkey: https://download.docker.com/linux/centos/gpg
+
+- name: remove xorg packages
+  yum:
+    name: docker-ce-17.03.2.ce-1.el7.centos.x86_64
+    state: absent
+- name: remove xorg packages
+  yum:
+    name: docker-ce-selinux-17.03.2.ce-1.el7.centos.noarch
+    state: absent
+
+- name: Install container-selinux
+  yum:
+    name: http://mirror.centos.org/centos/7/extras/x86_64/Packages/container-selinux-2.42-1.gitad8f0f7.el7.noarch.rpm
+    state: present
+
+- name: Install docker-ce
+  yum:
+    name: docker-ce
+    state: present
+- name: Install kubernetes components
+  yum: pkg={{item}} state=installed
+  with_items:
+    - kubeadm
+    - kubelet
+    - kubectl
+- name: Remove swapfile from /etc/fstab
+  mount:
+    name: swap
+    fstype: swap
+    state: absent
+- name: Disable swap
+  command: swapoff -a
+  when: ansible_swaptotal_mb > 0
+- name: enable net 1
+  command: echo 1 > /proc/sys/net/bridge/bridge-nf-call-iptables; sysctl -p
+
+- name: Modprode Kernel Module for IPVS
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - ip_vs
+    - ip_vs_rr
+    - ip_vs_wrr
+    - ip_vs_sh
+    - nf_conntrack_ipv4
+
+- name: Start docker-ce
+  service:
+    name: docker
+    state: started
+
+- name: Enale service docker at boot
+  service:
+    name: docker
+    enabled: yes

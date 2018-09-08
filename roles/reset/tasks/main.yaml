@@ -1,0 +1,15 @@
+---
+- name: Reset cluster
+  command: kubeadm reset -f
+  ignore_errors: yes 
+- name: Remove all files
+  file:
+    state: absent
+    path: "{{ item }}"
+  with_items:
+    - "{{ k8scfg }}"
+    - /tmp/add_node.sh
+    - /tmp/update_calico.sh
+    - /tmp/add_node.exist
+    - /var/lib/kubelet
+    - /var/lib/etcd

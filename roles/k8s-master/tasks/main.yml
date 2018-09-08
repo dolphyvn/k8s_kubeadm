@@ -1,0 +1,227 @@
+---
+- name: Include a pre-installaion check
+  include: pre-install.yaml
+
+- name: Create kubernetes folder
+  file: 
+   name: "{{ etcd_cert_dir }}"
+   state: directory
+
+
+- name: Create kubeadm cluster config
+  template:
+    src: "kubeadm-master.j2"
+    dest: "/etc/kubernetes/kubeadm-master.yml"
+
+
+- name: Check if old apiserver cert exists on host
+  stat:
+    path: "{{ k8scfg }}/pki/front-proxy-ca.key"
+  register: old_frontproxy_cert
+  delegate_to: "{{ groups['master'][0] }}"
+  run_once: true
+
+- name: Run kubeadm init on first master
+  command: kubeadm init --config="{{ k8scfg }}/kubeadm-master.yml"
+  when: >
+        inventory_hostname == groups['master'][0]
+        and old_frontproxy_cert.stat.exists == False
+  ignore_errors: yes 
+
+- name: Copy admin.conf to .kube/config
+  copy:
+    src: "{{ k8scfg }}/admin.conf"
+    dest: /root/.kube/config
+    remote_src: yes
+  when: >
+        inventory_hostname == groups['master'][0]
+
+####Copy required files to other control plane nodes
+- name: slurp kubeadm_certs certs
+  slurp: src={{ item }}
+  with_items:
+    # - "{{ kube_cert_dir }}/apiserver.crt"
+    # - "{{ kube_cert_dir }}/apiserver.key"
+    # - "{{ kube_cert_dir }}/apiserver-etcd-client.crt"
+    # - "{{ kube_cert_dir }}/apiserver-etcd-client.key"
+    # - "{{ kube_cert_dir }}/apiserver-kubelet-client.crt"
+    # - "{{ kube_cert_dir }}/apiserver-kubelet-client.key"
+    # - "{{ kube_cert_dir }}/front-proxy-client.crt"
+    # - "{{ kube_cert_dir }}/front-proxy-client.key"
+    - "{{ kube_cert_dir }}/ca.crt"
+    - "{{ kube_cert_dir }}/ca.key"
+    - "{{ kube_cert_dir }}/sa.key"
+    - "{{ kube_cert_dir }}/sa.pub"
+    - "{{ kube_cert_dir }}/front-proxy-ca.crt"
+    - "{{ kube_cert_dir }}/front-proxy-ca.key"
+    - "{{ etcd_cert_dir }}/ca.crt"
+    - "{{ etcd_cert_dir }}/ca.key"
+    # - "{{ etcd_cert_dir }}/peer.crt"
+    # - "{{ etcd_cert_dir }}/peer.key"
+    - "{{ k8scfg }}/admin.conf"
+  register: kubeadm_certs
+  run_once: true
+  when: >
+        inventory_hostname == groups['master'][0]
+
+- name: write out kubeadm certs
+  copy:
+    dest: "{{ item.item }}"
+    content: "{{ item.content | b64decode }}"
+    owner: root
+    group: root
+    mode: 0700
+  with_items: "{{ kubeadm_certs.results }}"
+  when: >
+        inventory_hostname == groups['master'][1]
+        or inventory_hostname == groups['master'][2]
+####Copy required files to other control plane nodes
+
+
+
+
+
+###Start init other control plane
+- name: Check if apiserver already init and exists on second controlplane
+  stat:
+    path: "{{ k8scfg }}/kubelet.conf"
+  register: sec_kubelet_01
+  delegate_to: "{{groups['master'][1]}}"
+  run_once: true
+
+- name: Check if apiserver already init and exists on third controlplane
+  stat:
+    path: "/etc/kubernetes/kubelet.conf"
+  register: sec_kubelet_02
+  delegate_to: "{{groups['master'][1]}}"
+  run_once: true
+  # when: >
+  #       inventory_hostname == groups['master'][1]
+
+- name: Run kubeadm init on second controlplane
+  command: "{{ item }}"
+  with_items:
+    - kubeadm alpha phase certs all --config {{k8scfg}}/kubeadm-master.yml
+    - kubeadm alpha phase kubelet config write-to-disk --config {{k8scfg}}/kubeadm-master.yml
+    - kubeadm alpha phase kubelet write-env-file --config {{k8scfg}}/kubeadm-master.yml
+    - kubeadm alpha phase kubeconfig kubelet --config {{k8scfg}}/kubeadm-master.yml
+    - systemctl restart kubelet
+  when: >
+        inventory_hostname == groups['master'][1]
+        and sec_kubelet_01.stat.exists == False
+
+- name: Run kubeadm init on third controlplane
+  command: "{{ item }}"
+  with_items:
+    - kubeadm alpha phase certs all --config {{k8scfg}}/kubeadm-master.yml
+    - kubeadm alpha phase kubelet config write-to-disk --config {{k8scfg}}/kubeadm-master.yml
+    - kubeadm alpha phase kubelet write-env-file --config {{k8scfg}}/kubeadm-master.yml
+    - kubeadm alpha phase kubeconfig kubelet --config {{k8scfg}}/kubeadm-master.yml
+    - systemctl restart kubelet
+  when: >
+        inventory_hostname == groups['master'][2]
+        and sec_kubelet_02.stat.exists == False
+
+- name: Create script to add second and third master to the node
+  template:
+    src: "add_node.j2"
+    dest: "/tmp/add_node.sh"
+    mode: "u=x,g=x,o=x"
+  when: >
+        inventory_hostname == groups['master'][1]
+        or inventory_hostname == groups['master'][2]
+
+
+- name: Check if add_node already execute on second controlplane
+  stat:
+    path: "/tmp/add_node.exist"
+  register: add_node_exist_01
+  delegate_to: "{{groups['master'][1]}}"
+  run_once: true
+
+
+- name: Check if add_node already execute on third controlplane
+  stat:
+    path: "/tmp/add_node.exist"
+  register: add_node_exist_02
+  delegate_to: "{{groups['master'][2]}}"
+  run_once: true
+
+- name: Add second controlplane to etcd cluster
+  command: sh /tmp/add_node.sh
+  when: >
+        inventory_hostname == groups['master'][1]
+        and add_node_exist_01.stat.exists == False
+
+- name: Add third controlplane to etcd cluster
+  command: sh /tmp/add_node.sh
+  when: >
+        inventory_hostname == groups['master'][1]
+        and add_node_exist_02.stat.exists == False
+
+### after execute add_node.sh /etc/kubernetes/manifests/etcd.yaml will created
+#### check if /etc/kubernetes/manifests/kube-scheduler.yaml is exist 
+- name: Check if add_node already execute on second controlplane
+  stat:
+    path: "{{ k8s_manifest_dir }}/kube-scheduler.yaml"
+  register: kube_scheduler_01
+  delegate_to: "{{groups['master'][1]}}"
+  run_once: true
+
+- name: Check if add_node already execute on third controlplane
+  stat:
+    path: "{{ k8s_manifest_dir }}/kube-scheduler.yaml"
+  register: kube_scheduler_02
+  delegate_to: "{{groups['master'][2]}}"
+  run_once: true
+
+- name: Deploy the second control plane components and mark the node as a master
+  command: "{{ item }}"
+  with_items:
+    - kubeadm alpha phase kubeconfig all --config {{k8scfg}}/kubeadm-master.yml
+    - kubeadm alpha phase controlplane all --config {{k8scfg}}/kubeadm-master.yml
+    - kubeadm alpha phase mark-master --config {{k8scfg}}/kubeadm-master.yml
+  when: >
+        inventory_hostname == groups['master'][1]
+        and kube_scheduler_01.stat.exists == False
+
+- name: Deploy the third control plane components and mark the node as a master
+  command: "{{ item }}"
+  with_items:
+    - kubeadm alpha phase kubeconfig all --config {{k8scfg}}/kubeadm-master.yml
+    - kubeadm alpha phase controlplane all --config {{k8scfg}}/kubeadm-master.yml
+    - kubeadm alpha phase mark-master --config {{k8scfg}}/kubeadm-master.yml
+  when: >
+        inventory_hostname == groups['master'][2]
+        and kube_scheduler_02.stat.exists == False
+###Start init other control plane
+
+- name: Create calico network manifest
+  template:
+    src: "calico.j2"
+    dest: "{{ k8scfg }}/calico.yml"
+  when: >
+        inventory_hostname == groups['master'][0]
+
+- name: Create update_calico script for replacing cert
+  template:
+    src: "update_calico.j2"
+    dest: "/tmp/update_calico.sh"
+  when: >
+        inventory_hostname == groups['master'][0]
+
+
+# - name: Wait for calico script creation finished
+#   wait_for:
+#     path: "{{ k8scfg }}/calico.yml"
+#     delay: 1
+#     timeout: 30
+
+# ##Start iinstall network
+# - name: Start calico netowrk installaion
+#   command: "{{ item }}"
+#   with_items:
+#     - kubectl apply -f {{ calico_rbac }}
+#     - kubectl apply -f {{ k8scfg }}/calico.yml
+#   when: >
+#         inventory_hostname == groups['master'][0]

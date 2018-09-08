@@ -1,0 +1,45 @@
+---
+- name: Create kubernetes folder
+  file: 
+   name: "{{ kube_cert_dir }}"
+   state: directory
+
+#### Check file exist
+- name: Check if kubelet.conf exists
+  stat:
+    path: "{{ k8scfg }}/kubelet.conf"
+  register: kubelet_conf
+  when: > 
+        inventory_hostname not in groups['master'] 
+#######################
+
+
+- name: Calculate kubeadm CA cert hash
+  shell: openssl x509 -pubkey -in {{ kube_cert_dir }}/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //'
+  register: kubeadm_ca_hash
+  delegate_to: "{{ groups['master'][0] }}"
+  run_once: true
+
+- name: Create kubeadm token for joining nodes with 24h expiration (default)
+  command: "kubeadm token create"
+  run_once: true
+  register: temp_token
+  delegate_to: "{{ groups['master'][0] }}"
+
+
+- name: Create kubeadm client config
+  template:
+    src: "kubeadm-client.j2"
+    dest: "{{ k8scfg }}/kubeadm-client.yml"
+    backup: yes
+  when: inventory_hostname not in groups['master']
+  vars:
+    kubeadm_token: "{{ temp_token.stdout }}"
+
+- name: Join to cluster if needed
+  command: >-
+    kubeadm join
+    --config {{ k8scfg }}/kubeadm-client.yml
+  when: > 
+        inventory_hostname not in groups['master'] 
+        and (not kubelet_conf.stat.exists)

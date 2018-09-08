@@ -1,0 +1,11 @@
+kube_cert_dir: /etc/kubernetes/pki
+etcd_cert_dir: /etc/kubernetes/pki/etcd
+kubeadm_config: /etc/kubernetes/config.yml
+calico_rbac: https://docs.projectcalico.org/v3.2/getting-started/kubernetes/installation/rbac.yaml
+calico_network_manifest: https://docs.projectcalico.org/v3.2/getting-started/kubernetes/installation/hosted/calico.yaml
+k8scfg: /etc/kubernetes
+etcd_lib_dir: /var/lib/etcd
+kubelet_lib_dir: /var/lib/kubelet
+k8s_manifest_dir: /etc/kubernetes/manifests 
+load_balancer_dns: your_lb_domain.com
+load_balancer_port: 7443

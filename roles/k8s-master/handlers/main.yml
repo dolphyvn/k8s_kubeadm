@@ -1,0 +1,3 @@
+---
+- name: Add node to etcd cluster
+  command: sh /tmp/add_node.sh

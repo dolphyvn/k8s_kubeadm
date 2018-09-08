@@ -1,0 +1,12 @@
+- hosts: all
+  roles:
+    - { role: docker}
+    - { role: kubelet }
+    
+- hosts: master
+  roles:
+    - { role: k8s-master }
+
+- hosts: nodes:master
+  roles:
+    - { role: nodes }
