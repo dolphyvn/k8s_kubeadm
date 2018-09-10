@@ -1,5 +1,5 @@
 [all:vars]
-load_balancer_dns=k8snode001.ebi.ac.uk
+load_balancer_dns=k8snode001
 load_balancer_port=7443
 [lb]
 k8snode001  ip=172.16.0.117
