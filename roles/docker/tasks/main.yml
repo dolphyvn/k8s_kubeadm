@@ -1,4 +1,54 @@
 ---
+# - name: Install glusterfs-client
+#   yum:
+#     name: glusterfs-client
+#     state: latest
+# # - name: Run modprobe
+# #   command: "{{ item }}"
+# #   with_items:
+# #     - modprobe dm_thin_pool
+# #     - modprobe dm_snapshot
+# #     - fallocate -l 80G /var/glusterimage
+# #     - losetup /dev/loop4 /var/glusterimage
+
+# - name: Create loopback devices boot time
+#   template:
+#     src: "loopback_gluster.service.j2"
+#     dest: "/etc/systemd/system/loopback_gluster.service"
+
+# - name: Enale loopback devices boot time
+#   service:
+#     name: loopback_gluster
+#     enabled: yes
+
+- name: Create hosts file
+  template:
+    src: "hosts.j2"
+    dest: "/etc/hosts"
+    
+- name: Create all required folders
+  file: 
+   path: "{{ item }}"
+   state: directory
+   owner: nobody
+  with_items: 
+   - "{{ k8s_vsftpd_logs }}"
+   - "{{ k8s_gridftp_logs }}"
+   - "{{ k8s_http_logs }}"
+   - "{{ k8s_rsync_logs }}"
+
+# - name: Create docker proxy folders
+#   file: 
+#    path: "{{ item }}"
+#    state: directory
+#   with_items: 
+#    - "/etc/systemd/system/docker.service.d/"
+
+- name: Create docker custom proxy config
+  template:
+    src: "http_proxy.conf.j2"
+    dest: "/etc/hosts"
+
 - name: Add k8s repository
   yum_repository:
     name: kubernetes
@@ -25,32 +75,56 @@
   yum:
     name: docker-ce-selinux-17.03.2.ce-1.el7.centos.noarch
     state: absent
+- name: Copying container-selinux to remote
+  copy:
+    src: container-selinux-2.42-1.gitad8f0f7.el7.noarch.rpm
+    dest: /tmp/
 
 - name: Install container-selinux
   yum:
-    name: http://mirror.centos.org/centos/7/extras/x86_64/Packages/container-selinux-2.42-1.gitad8f0f7.el7.noarch.rpm
+    name: /tmp/container-selinux-2.42-1.gitad8f0f7.el7.noarch.rpm
     state: present
+
+- name: Remove old docker-ce
+  yum: pkg={{item}} state=absent
+  with_items:
+    - docker-ce
+- name: Remove docker-ce-cli if exist
+  yum:
+    name: docker-ce-cli-18.09.0-3.el7.x86_64
+    state: absent
 
 - name: Install docker-ce
   yum:
-    name: docker-ce
+    name: docker-ce-{{ docker_version }}
     state: present
-- name: Install kubernetes components
-  yum: pkg={{item}} state=installed
+
+- name: Remove old kubernetes components
+  yum: pkg={{item}} state=absent
   with_items:
     - kubeadm
     - kubelet
     - kubectl
+
+- name: Install kubernetes components
+  yum: pkg={{item}} state=installed
+  with_items:
+    - kubeadm-{{ kube_version }}
+    - kubelet-{{ kube_version }}
+    - kubectl-{{ kube_version }}
 - name: Remove swapfile from /etc/fstab
   mount:
     name: swap
     fstype: swap
     state: absent
+
 - name: Disable swap
   command: swapoff -a
   when: ansible_swaptotal_mb > 0
 - name: enable net 1
   command: echo 1 > /proc/sys/net/bridge/bridge-nf-call-iptables; sysctl -p
+- name: enable vm.max_map_count
+  command: sysctl -w vm.max_map_count=262144
 
 - name: Modprode Kernel Module for IPVS
   modprobe:

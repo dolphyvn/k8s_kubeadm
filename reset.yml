@@ -1,3 +1,6 @@
-- hosts: master:nodes
+- hosts: master
   roles:
-    - { role: reset }
+    - { role: test }
+# - hosts: servicenetwork1
+#   roles:
+#     - { role: reset }

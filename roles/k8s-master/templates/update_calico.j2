@@ -1,4 +1,7 @@
 #!/bin/sh
+cd /etc/kubernetes/
+# kubectl apply -f rbac.yml
+
 etcd_ca=`cat /etc/kubernetes/pki/etcd/ca.crt | base64 -w 0`
 etcd_cert=`cat /etc/kubernetes/pki/apiserver-etcd-client.crt | base64 -w 0`
 etcd_key=`cat /etc/kubernetes/pki/apiserver-etcd-client.key | base64 -w 0`
@@ -6,3 +9,4 @@ etcd_key=`cat /etc/kubernetes/pki/apiserver-etcd-client.key | base64 -w 0`
 sed -i -e "s/__etcd_key__/${etcd_key}/g" /etc/kubernetes/calico.yml
 sed -i -e "s/__etcd_cert__/${etcd_cert}/g" /etc/kubernetes/calico.yml
 sed -i -e "s/__etcd_ca__/${etcd_ca}/g" /etc/kubernetes/calico.yml
+kubectl apply -f calico.yml

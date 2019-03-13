@@ -1,11 +1,35 @@
 kube_cert_dir: /etc/kubernetes/pki
 etcd_cert_dir: /etc/kubernetes/pki/etcd
 kubeadm_config: /etc/kubernetes/config.yml
-calico_rbac: https://docs.projectcalico.org/v3.2/getting-started/kubernetes/installation/rbac.yaml
-calico_network_manifest: https://docs.projectcalico.org/v3.2/getting-started/kubernetes/installation/hosted/calico.yaml
+heketi_binary: https://github.com/heketi/heketi/releases/download/v8.0.0/heketi-client-v8.0.0.linux.amd64.tar.gz
+heketi_zip: heketi-client-v8.0.0.linux.amd64.tar.gz 
+calico_rbac: https://docs.projectcalico.org/v3.3/getting-started/kubernetes/installation/rbac.yaml
+calico_network_manifest: https://docs.projectcalico.org/v3.3/getting-started/kubernetes/installation/hosted/calico.yaml
 k8scfg: /etc/kubernetes
 etcd_lib_dir: /var/lib/etcd
 kubelet_lib_dir: /var/lib/kubelet
-k8s_manifest_dir: /etc/kubernetes/manifests 
-load_balancer_dns: your_lb_domain.com
+k8s_manifest_dir: /etc/kubernetes/manifests/
+k8s_vsftpd_logs: /var/log/vsftpd/
+k8s_gridftp_logs: /var/log/gridftp/
+k8s_http_logs: /var/log/http/
+k8s_rsync_logs: /var/log/rsync/
+#load_balancer_dns: hxvltxfer001.ebi.ac.uk
+first_master: hhvltxfer001.ebi.ac.uk
 load_balancer_port: 7443
+http_load_balancer_port: 8443
+glusterfs_load_balancer_port: 8443
+glusterfs_device: /dev/loop0
+glusterfs_namespace: glusterfs
+api_port: 6443
+calico_ipv4_pool: 172.15.0.0/16
+api_address: 127.0.0.1
+ifcfg_dir: /etc/sysconfig/network-scripts/
+haproxy_conf_dir: /etc/haproxy/
+sysctl_file_path: "/etc/sysctl.d/99-sysctl.conf"
+lb_haproxy: /etc/haproxy
+kube_version: 1.13.2
+docker_version: 18.06.1.ce
+vars:
+  proxy_env:
+    http_proxy: http://hh-wwwcache.ebi.ac.uk:3128
+    https_proxy: http://hh-wwwcache.ebi.ac.uk:3128

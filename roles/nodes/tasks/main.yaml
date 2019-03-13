@@ -1,8 +1,41 @@
 ---
 - name: Create kubernetes folder
   file: 
-   name: "{{ kube_cert_dir }}"
+   path: "{{ item }}"
    state: directory
+  with_items: 
+   - "{{ k8s_manifest_dir }}"
+   - "{{ haproxy_conf_dir }}"
+  
+- name: enable net 1
+  command: echo 1 > /proc/sys/net/bridge/bridge-nf-call-iptables; sysctl -p
+# kube-proxy needs net.bridge.bridge-nf-call-iptables enabled when found if br_netfilter is not a module
+- name: Check if bridge-nf-call-iptables key exists
+  command: "sysctl net.bridge.bridge-nf-call-iptables"
+  failed_when: false
+  changed_when: false
+  register: sysctl_bridge_nf_call_iptables
+
+- name: Enable bridge-nf-call tables
+  sysctl:
+    name: "{{ item }}"
+    state: present
+    sysctl_file: "{{ sysctl_file_path }}"
+    value: 1
+    reload: yes
+  when: sysctl_bridge_nf_call_iptables.rc == 0
+  with_items:
+    - net.bridge.bridge-nf-call-iptables
+    - net.bridge.bridge-nf-call-arptables
+    - net.bridge.bridge-nf-call-ip6tables
+
+- name: Enable ip forwarding
+  sysctl:
+    sysctl_file: "{{sysctl_file_path}}"
+    name: net.ipv4.ip_forward
+    value: 1
+    state: present
+    reload: yes
 
 #### Check file exist
 - name: Check if kubelet.conf exists
@@ -21,7 +54,7 @@
   run_once: true
 
 - name: Create kubeadm token for joining nodes with 24h expiration (default)
-  command: "kubeadm token create"
+  command: "kubeadm token create --ttl 0"
   run_once: true
   register: temp_token
   delegate_to: "{{ groups['master'][0] }}"
@@ -36,10 +69,22 @@
   vars:
     kubeadm_token: "{{ temp_token.stdout }}"
 
-- name: Join to cluster if needed
+# - name: Join to cluster if needed
+#   command: >-
+#     kubeadm join
+#     --config {{ k8scfg }}/kubeadm-client.yml
+#   when: > 
+#         inventory_hostname not in groups['master'] 
+#         and (not kubelet_conf.stat.exists)
+
+- name: Join to nodes to cluster 
   command: >-
-    kubeadm join
-    --config {{ k8scfg }}/kubeadm-client.yml
+    kubeadm join {{ load_balancer_dns }}:{{ glusterfs_load_balancer_port }} 
+    --token {{ temp_token.stdout }} --discovery-token-ca-cert-hash sha256:{{ kubeadm_ca_hash.stdout }}
   when: > 
-        inventory_hostname not in groups['master'] 
-        and (not kubelet_conf.stat.exists)
+        inventory_hostname not in groups['master']
+        and kubelet_conf.stat.exists == False
+
+
+
+

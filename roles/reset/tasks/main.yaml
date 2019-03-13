@@ -2,6 +2,14 @@
 - name: Reset cluster
   command: kubeadm reset -f
   ignore_errors: yes 
+- name: Remove iptables rules
+  command: "{{ item }}"
+  with_items:
+    - iptables -F
+    - iptables -t nat -F
+    - iptables -t mangle -F
+    - iptables -X
+  
 - name: Remove all files
   file:
     state: absent
@@ -13,3 +21,19 @@
     - /tmp/add_node.exist
     - /var/lib/kubelet
     - /var/lib/etcd
+    - /opt/cni/bin/
+    # - /etc/cni/net.d/
+
+- name: Create hosts file
+  template:
+    src: "hosts.j2"
+    dest: "/etc/hosts"
+
+# - name: Create script to add second and third master to the node
+#   template:
+#     src: "add_node.j2"
+#     dest: "/tmp/add_node.sh"
+#     mode: "u=x,g=x,o=x"
+#   when: >
+#         inventory_hostname == groups['master'][1]
+#         or inventory_hostname == groups['master'][2]
